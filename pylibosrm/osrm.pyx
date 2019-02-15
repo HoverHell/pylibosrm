@@ -22,7 +22,7 @@ def main():
     filename = sys.argv[1]
     # // Configure based on a .osrm base path, and no datasets in shared mem from osrm-datastore
     # EngineConfig config;
-    cdef osrm.EngineConfig config;
+    cdef osrm.EngineConfig config
     # config.storage_config = {argv[1]};
     config.storage_config = [filename]
     # config.use_shared_memory = false;
@@ -33,7 +33,8 @@ def main():
     # //
     # // config.algorithm = EngineConfig::Algorithm::CH;
     # config.algorithm = EngineConfig::Algorithm::MLD;
-    config.algorithm = osrm.Algorithm.MLD
+    config.algorithm = osrm.MLD
+    # config.algorithm = osrm.Algorithm.MLD
     # // Routing machine with several services (such as Route, Table, Nearest, Trip, Match)
     # const OSRM osrm{config};
     cdef osrm.OSRM* osrm_obj = new osrm.OSRM(config)

@@ -18,11 +18,14 @@ cdef extern from "osrm/coordinate.hpp" namespace "osrm":
 # #include "osrm/engine_config.hpp"
 
 
-cdef extern from "osrm/engine_config.hpp" namespace "osrm":
-    enum Algorithm:
-        CH
-        CoreCH  # "Deprecated, will be removed in v6.0"
-        MLD
+cdef extern from "osrm/engine_config.hpp" namespace "EngineConfig":
+    cdef cppclass Algorithm:
+        pass
+
+cdef extern from "osrm/engine_config.hpp" namespace "EngineConfig::Algorithm":
+    cdef Algorithm CH
+    cdef Algorithm CoreCH  # "Deprecated, will be removed in v6.0"
+    cdef Algorithm MLD
 
 
 cdef extern from "osrm/engine_config.hpp" namespace "osrm":
@@ -32,7 +35,7 @@ cdef extern from "osrm/engine_config.hpp" namespace "osrm":
 
 
 # #include "osrm/json_container.hpp"
-cdef extern from "osrm/json_container.hpp" namespace "osrm":
+cdef extern from "osrm/json_container.hpp" namespace "osrm::json":
     struct Object:
         pass
     struct Array:
