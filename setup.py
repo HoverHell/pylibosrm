@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 from setuptools import setup
-
+from Cython.Build import cythonize
+from distutils.extension import Extension
 
 SETUP_KWARGS = dict(
     name='pylibosrm',
@@ -13,6 +14,44 @@ SETUP_KWARGS = dict(
     author_email='hoverhell@gmail.com',
     install_requires=(),
     tests_require=(),
+    ext_modules=cythonize([
+        Extension(
+            "pylibosrm.osrm",
+            sources=[
+                # "pylibosrm/osrm.pxd",
+                "pylibosrm/osrm.pyx"],
+
+            # # TODO: build:
+            # g++ -Wall -fexceptions -g \
+            #     -I./osrm-backend/build \
+            #     -I./osrm-backend \
+            #     -I./osrm-backend/include \
+            #     -I./osrm-backend/third_party/variant/include \
+            #     -c wrapper.cpp -o wrapper.o
+            # # TODO: link:
+            # g++ \
+            #     -L./osrm-backend/build \
+            #     -L./osrm-backend \
+            #     -o ./ ./wrapper.o \
+            #     -static \
+            #     -static-libgcc \
+            #     ./osrm-backend/build/libosrm.a \
+            #     /usr/lib/x86_64-linux-gnu/libboost_system.a \
+            #     /usr/lib/x86_64-linux-gnu/libboost_iostreams.a \
+            #     /usr/lib/x86_64-linux-gnu/libboost_filesystem.a \
+            #     /usr/lib/x86_64-linux-gnu/libboost_thread.a \
+            #     /usr/lib/x86_64-linux-gnu/librt.a \
+            #     /usr/lib/x86_64-linux-gnu/libpthread.a
+
+            include_dirs=[
+                "./osrm-backend/include",
+                "./osrm-backend/third_party/variant/include",
+            ],
+            libraries=[],
+            language="c++",
+
+        ),
+    ]),
     description=(
         'libosrm Cython wrapper'),
     classifiers=(
