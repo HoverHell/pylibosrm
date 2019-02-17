@@ -12,6 +12,18 @@ def _dbg(msg):
     sys.stderr.flush()
 
 
+# Data needs to be downloaded and prepared. Example:
+# fln="central-fed-district-latest"
+# mode="foot"  # mode="driving"
+# mkdir osrm_data
+# cd osrm_data
+# wget "http://download.geofabrik.de/russia/${fln}.osm.pbf"
+# osrm_in_docker() { docker run --rm --name osrm-backend-b -t -v "$(pwd):/data" osrm/osrm-backend "$@"; }
+# osrm_in_docker osrm-extract -p "/opt/${mode}.lua" "/data/${fln}.osm.pbf"
+# osrm_in_docker osrm-partition "/data/${fln}.osrm"
+# osrm_in_docker osrm-customize "/data/${fln}.osrm"
+
+
 filename = "./osrm_data/central-fed-district-latest.osrm"
 _dbg('import')
 import pylibosrm.osrm_wrapper as ow
