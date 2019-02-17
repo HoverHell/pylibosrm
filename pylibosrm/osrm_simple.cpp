@@ -27,7 +27,10 @@ struct osrm_holder_struct {
 };
 typedef struct osrm_holder_struct osrm_holder_t;
 
-osrm_holder_t *osrm_initialize(const char *filename) {
+typedef long long unsigned int ptr_t;
+
+
+osrm_holder_t *osrm_initialize(const char *filename, bool _debug=false) {
   // Configure based on a .osrm base path, and no datasets in shared mem from osrm-datastore
   osrm::EngineConfig config;
 
@@ -43,9 +46,12 @@ osrm_holder_t *osrm_initialize(const char *filename) {
 
   // Routing machine with several services (such as Route, Table, Nearest, Trip, Match)
   osrm::OSRM osrm{config};
+  if (_debug) { std::cerr << "osrm_simple.osrm_initialize: Building osrm_holder...\n"; }
+  if (_debug) { std::cerr << "osrm_simple.osrm_initialize: OSRM at " << std::to_string((ptr_t)(&osrm)) << ";\n"; }
 
   osrm_holder_t *osrm_holder;
   osrm_holder = (typeof(osrm_holder))malloc(sizeof(*osrm_holder));
+  if (_debug) { std::cerr << "osrm_simple.osrm_initialize: osrm_holder at " << std::to_string((ptr_t)osrm_holder) << ";\n"; }
   osrm_holder->osrm_obj = &osrm;
   return osrm_holder;
 }
@@ -62,8 +68,10 @@ struct route_result_struct {
 route_result_struct osrm_route(
   osrm_holder_t *osrm_holder,
   double from_lon, double from_lat,
-  double to_lon, double to_lat
+  double to_lon, double to_lat,
+  bool _debug=false
 ) {
+  if (_debug) { std::cerr << "Initializing params...\n"; }
   // The following shows how to use the Route service; configure this service
   osrm::RouteParameters params;
 
@@ -77,15 +85,21 @@ route_result_struct osrm_route(
   // Response is in JSON format
   osrm::json::Object result;
 
+  if (_debug) { std::cerr << "osrm_simple.osrm_route: Extracting the OSRM object...\n"; }
+  if (_debug) { std::cerr << "osrm_simple.osrm_route: osrm_holder at " << std::to_string((ptr_t)osrm_holder) << ";\n"; }
   // Execute routing request, this does the heavy lifting
-  const osrm::OSRM *osrm_obj = static_cast<osrm::OSRM*>(osrm_holder->osrm_obj);
+  const osrm::OSRM *osrm_obj_ref = static_cast<osrm::OSRM*>(osrm_holder->osrm_obj);
 
-  const auto status = osrm_obj->Route(params, result);
+  if (_debug) { std::cerr << "osrm_simple.osrm_route: OSRM at " << std::to_string((ptr_t)osrm_obj_ref) << ";\n"; }
+  if (_debug) { std::cerr << "osrm_simple.osrm_route: Calling Route()...\n"; }
+  const auto status = osrm_obj_ref->Route(params, result);
 
   route_result_struct route_result;
   if (status == osrm::Status::Ok) {
+    if (_debug) { std::cerr << "osrm_simple.osrm_route: Status Ok;\n"; }
     auto &routes = result.values["routes"].get<osrm::json::Array>();
 
+    if (_debug) { std::cerr << "osrm_simple.osrm_route: Filling result from the first route...;\n"; }
     // Let's just use the first route
     auto &route = routes.values.at(0).get<osrm::json::Object>();
     route_result.distance_meters = route.values["distance"].get<osrm::json::Number>().value;
@@ -93,11 +107,13 @@ route_result_struct osrm_route(
 
     // Warn users if extract does not contain the default coordinates from above
     if (route_result.distance_meters == 0 || route_result.duration_seconds == 0) {
+      if (_debug) { std::cerr << "osrm_simple.osrm_route: Result is empty;\n"; }
       // asprintf(&route_result.errors, "empty_result: Suspiciously empty distance / duration");
       route_result.errors = "empty_result: Suspiciously empty distance / duration";
     }
 
   } else if (status == osrm::Status::Error) {
+    if (_debug) { std::cerr << "osrm_simple.osrm_route: Status is Error;\n"; }
     // asprintf(
     //   &route_result.errors,
     //   "error result: %s %s",
@@ -109,5 +125,6 @@ route_result_struct osrm_route(
       " " +
       result.values["message"].get<osrm::json::String>().value);
   }
+  if (_debug) { std::cerr << "osrm_simple.osrm_route: Returning.\n"; }
   return route_result;
 }
