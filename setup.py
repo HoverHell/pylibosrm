@@ -16,11 +16,21 @@ SETUP_KWARGS = dict(
     tests_require=(),
     ext_modules=cythonize([
         Extension(
-            "pylibosrm.osrm",
+            "pylibosrm.osrm_wrapper",
             sources=[
                 # "pylibosrm/osrm.pxd",
-                "pylibosrm/osrm.pyx"],
-
+                "pylibosrm/osrm_wrapper.pyx"],
+            extra_link_args=(
+                '-static',
+                '-static-libgcc',
+                './osrm-backend/build/libosrm.a',
+                '/usr/lib/x86_64-linux-gnu/libboost_system.a',
+                '/usr/lib/x86_64-linux-gnu/libboost_iostreams.a',
+                '/usr/lib/x86_64-linux-gnu/libboost_filesystem.a',
+                '/usr/lib/x86_64-linux-gnu/libboost_thread.a',
+                '/usr/lib/x86_64-linux-gnu/librt.a',
+                '/usr/lib/x86_64-linux-gnu/libpthread.a',
+            ),
             # # TODO: build:
             # g++ -Wall -fexceptions -g \
             #     -I./osrm-backend/build \
@@ -54,7 +64,7 @@ SETUP_KWARGS = dict(
     ]),
     description=(
         'libosrm Cython wrapper'),
-    classifiers=(
+    classifiers=[
         # https://github.com/HoverHell/python-pypi-template
         'License :: OSI Approved :: MIT License',
         'Development Status :: 2 - Pre-Alpha',
@@ -67,7 +77,8 @@ SETUP_KWARGS = dict(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: Implementation :: CPython',
-        'Programming Language :: Python :: Implementation :: PyPy'))
+        'Programming Language :: Python :: Implementation :: PyPy',
+    ])
 
 
 if __name__ == '__main__':
