@@ -160,8 +160,7 @@ SETUP_KWARGS = dict(
                 './osrm-backend/build',
             ),
             libraries=(
-                'osrm',
-                # 'boost',
+                ':libosrm.a',
                 'boost_regex',
                 'boost_date_time',
                 'boost_chrono',
