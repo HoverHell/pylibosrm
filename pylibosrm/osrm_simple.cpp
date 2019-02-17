@@ -30,7 +30,7 @@ typedef struct osrm_holder_struct osrm_holder_t;
 typedef long long unsigned int ptr_t;
 
 
-osrm_holder_t *osrm_initialize(const char *filename, bool _debug=false) {
+osrm::OSRM *osrm_initialize(const char *filename, bool _debug=false) {
   // Configure based on a .osrm base path, and no datasets in shared mem from osrm-datastore
   osrm::EngineConfig config;
 
@@ -45,15 +45,8 @@ osrm_holder_t *osrm_initialize(const char *filename, bool _debug=false) {
   config.algorithm = osrm::EngineConfig::Algorithm::MLD;
 
   // Routing machine with several services (such as Route, Table, Nearest, Trip, Match)
-  osrm::OSRM osrm{config};
-  if (_debug) { std::cerr << "osrm_simple.osrm_initialize: Building osrm_holder...\n"; }
-  if (_debug) { std::cerr << "osrm_simple.osrm_initialize: OSRM at " << std::to_string((ptr_t)(&osrm)) << ";\n"; }
-
-  osrm_holder_t *osrm_holder;
-  osrm_holder = (typeof(osrm_holder))malloc(sizeof(*osrm_holder));
-  if (_debug) { std::cerr << "osrm_simple.osrm_initialize: osrm_holder at " << std::to_string((ptr_t)osrm_holder) << ";\n"; }
-  osrm_holder->osrm_obj = &osrm;
-  return osrm_holder;
+  osrm::OSRM *osrm = new osrm::OSRM(config);
+  return osrm;
 }
 
 
@@ -66,7 +59,7 @@ struct route_result_struct {
 
 
 route_result_struct osrm_route(
-  osrm_holder_t *osrm_holder,
+  osrm::OSRM *osrm,
   double from_lon, double from_lat,
   double to_lon, double to_lat,
   bool _debug=false
@@ -85,14 +78,8 @@ route_result_struct osrm_route(
   // Response is in JSON format
   osrm::json::Object result;
 
-  if (_debug) { std::cerr << "osrm_simple.osrm_route: Extracting the OSRM object...\n"; }
-  if (_debug) { std::cerr << "osrm_simple.osrm_route: osrm_holder at " << std::to_string((ptr_t)osrm_holder) << ";\n"; }
-  // Execute routing request, this does the heavy lifting
-  const osrm::OSRM *osrm_obj_ref = static_cast<osrm::OSRM*>(osrm_holder->osrm_obj);
-
-  if (_debug) { std::cerr << "osrm_simple.osrm_route: OSRM at " << std::to_string((ptr_t)osrm_obj_ref) << ";\n"; }
   if (_debug) { std::cerr << "osrm_simple.osrm_route: Calling Route()...\n"; }
-  const auto status = osrm_obj_ref->Route(params, result);
+  const auto status = osrm->Route(params, result);
 
   route_result_struct route_result;
   if (status == osrm::Status::Ok) {
