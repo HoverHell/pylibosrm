@@ -6,7 +6,7 @@ from distutils.extension import Extension
 
 SETUP_KWARGS = dict(
     name='pylibosrm',
-    version='0.1.0',
+    version='0.1.1',
     packages=('pylibosrm',),
     url='https://github.com/HoverHell/pylibosrm',
     license='MIT',
