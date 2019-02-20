@@ -3,6 +3,8 @@
 from setuptools import setup
 from Cython.Build import cythonize
 from distutils.extension import Extension
+import numpy
+
 
 SETUP_KWARGS = dict(
     name='pylibosrm',
@@ -27,9 +29,10 @@ SETUP_KWARGS = dict(
                 '-fopenmp',
             ],
             include_dirs=[
+                numpy.get_include(),
                 "./osrm-backend/include",
                 "./osrm-backend/third_party/variant/include",
-            ],
+            ]),
             library_dirs=[
                 './osrm-backend/build',
             ],

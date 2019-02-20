@@ -4,7 +4,7 @@ set -Eeu
 
 (
     cd osrm-backend
-    mkdir build
+    mkdir -p build
     cd build
     cmake ..
     # -DBUILD_SHARED_LIBS=ON
