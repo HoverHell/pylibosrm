@@ -20,6 +20,8 @@ cd pylibosrm
 
 ./_build_osrm.sh
 
+pip install Cython
+
 ./setup.py build
 ./setup.py bdist_wheel
 # ./setup.py install
