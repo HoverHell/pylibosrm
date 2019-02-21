@@ -32,7 +32,7 @@ SETUP_KWARGS = dict(
                 numpy.get_include(),
                 "./osrm-backend/include",
                 "./osrm-backend/third_party/variant/include",
-            ]),
+            ],
             library_dirs=[
                 './osrm-backend/build',
             ],
