@@ -5,6 +5,7 @@ set -Eeu
 
 if ! which sudo ; then sudo(){ "$@"; }; fi
 
+sudo apt update -y
 sudo apt install -y \
      build-essential git cmake pkg-config \
      libbz2-dev libxml2-dev libzip-dev libboost-all-dev \
