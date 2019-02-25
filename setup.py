@@ -24,6 +24,7 @@ SETUP_KWARGS = dict(
             ],
             extra_compile_args=[
                 '-fopenmp',
+                '-std=c++14',
             ],
             extra_link_args=[
                 '-fopenmp',

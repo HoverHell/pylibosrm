@@ -10,7 +10,7 @@ sudo apt install -y \
      build-essential git cmake pkg-config \
      libbz2-dev libxml2-dev libzip-dev libboost-all-dev \
      lua5.2 liblua5.2-dev libtbb-dev \
-     python3-dev
+     python3 python3-dev python3-pip
 
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
@@ -21,9 +21,15 @@ cd pylibosrm
 
 ./_build_osrm.sh
 
-pip install Cython numpy
+if which pip; then
+    PIP=pip
+else
+    PIP=pip3
+fi
+
+"$PIP" install Cython numpy
 
 ./setup.py build
 ./setup.py bdist_wheel
 # ./setup.py install
-pip install ./dist/*.whl
+"$PIP" install ./dist/*.whl
