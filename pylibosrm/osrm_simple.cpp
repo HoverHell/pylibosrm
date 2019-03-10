@@ -13,6 +13,7 @@
 #include "osrm/coordinate.hpp"
 #include "osrm/engine_config.hpp"
 #include "osrm/json_container.hpp"
+#include "util/json_renderer.hpp"
 
 #include "osrm/osrm.hpp"
 #include "osrm/status.hpp"
@@ -23,6 +24,7 @@
 #include <utility>
 
 #include <cstdlib>
+#include <iomanip>
 
 // Additional struct-wrapper for easier Cythonability.
 // struct osrm_holder_struct {
@@ -42,7 +44,7 @@ osrm::OSRM *osrm_initialize(const char *filename, bool _debug=false) {
 
   config.storage_config = {filename};
   config.use_shared_memory = false;
-  // config.max_locations_distance_table = 10000;  // max 10000x10000; default is 100x100  // XXXXXXXX
+  config.max_locations_distance_table = 10000;  // max 10000x10000; default is 100x100;
 
   // We support two routing speed up techniques:
   // - Contraction Hierarchies (CH): requires extract+contract pre-processing
@@ -71,7 +73,7 @@ route_result_struct osrm_route(
   double to_lon, double to_lat,
   bool _debug=false
 ) {
-  if (_debug) { std::cerr << "Initializing params...\n"; }
+  if (_debug) { std::cerr << "osrm_simple.osrm_route: Initializing params...\n"; }
   // The following shows how to use the Route service; configure this service
   osrm::RouteParameters params;
 
@@ -134,7 +136,7 @@ std::string osrm_table(
   int mode=115,
   bool _debug=false
 ) {
-  if (_debug) { std::cerr << "Initializing params...\n"; }
+  if (_debug) { std::cerr << "osrm_simple.osrm_table: Initializing params...\n"; }
 
   std::string errors = "";
   osrm::TableParameters params;
@@ -155,36 +157,51 @@ std::string osrm_table(
         osrm::util::FloatLongitude{from_lon[idx]},
         osrm::util::FloatLatitude{from_lat[idx]}});
     params.sources.push_back(counter);
+    // if (_debug) { std::cerr << "Source #" << idx << " @" << params.coordinates.size() << " (" << counter << "): " << std::fixed << std::setprecision(10) << from_lon[idx] << "," << from_lat[idx] << ".\n"; }
     counter++;
   }
   for (idx = 0; idx < to_size; idx++) {
     params.coordinates.push_back({
         osrm::util::FloatLongitude{to_lon[idx]},
         osrm::util::FloatLatitude{to_lat[idx]}});
-    params.sources.push_back(counter);
+    params.destinations.push_back(counter);
+    // if (_debug) { std::cerr << "Destination #" << idx << ", @" << params.coordinates.size() << " (" << counter << "): " << std::fixed << std::setprecision(10) << to_lon[idx] << "," << to_lat[idx] << ".\n"; }
     counter++;
   }
 
   // Response is in JSON-structure format
   osrm::json::Object result;
 
-  if (_debug) { std::cerr << "osrm_simple.osrm_route: Calling Table()...\n"; }
+  if (_debug) { std::cerr << "osrm_simple.osrm_table: Calling Table()...\n"; }
   const auto status = osrm->Table(params, result);
 
   if (status == osrm::Status::Ok) {
-    if (_debug) { std::cerr << "osrm_simple.osrm_route: Status Ok;\n"; }
+    if (_debug) { std::cerr << "osrm_simple.osrm_table: Status Ok;\n"; }
 
     const auto &result_array = result.values.at(mode == 115 ? "durations" : "distances").get<osrm::json::Array>().values;
-    // BOOST_CHECK_EQUAL(result_array.size(), params.sources.size());
+    // if (_debug) { std::cerr << "osrm_simple.osrm_table: result JSON:"; osrm::util::json::render(std::cerr, result); std::cerr << "\n"; }
+    if (_debug) { std::cerr << "osrm_simple.osrm_table: result array size: " << result_array.size() << ";\n"; }
+    if (result_array.size() != from_size) {
+      return "Internal error: Result array size mismatch: expected " +
+        std::to_string(from_size) +
+        ", got " +
+        std::to_string(result_array.size()) + ".\n"; }
     for (uint64_t from_idx = 0; from_idx < result_array.size(); from_idx++) {
       const auto result_matrix = result_array[from_idx].get<osrm::json::Array>().values;
+      if (_debug) { if (from_idx == 0) { std::cerr << "osrm_simple.osrm_table: result array row size: " << result_matrix.size() << ";\n"; }; }
+      if (result_matrix.size() != to_size) {
+        return "Internal error: Result row size mismatch: expected " +
+          std::to_string(to_size) +
+          ", got " +
+          std::to_string(result_matrix.size()) + ".\n"; }
       for (uint64_t to_idx = 0; to_idx < result_matrix.size(); to_idx++) {
-        route_result[from_idx * from_size + to_idx] = result_matrix[to_idx].get<osrm::json::Number>().value;
+        // rows are `from`s, each row is of `to_size` elements.
+        route_result[from_idx * to_size + to_idx] = result_matrix[to_idx].get<osrm::json::Number>().value;
       }
     }
 
   } else if (status == osrm::Status::Error) {
-    if (_debug) { std::cerr << "osrm_simple.osrm_route: Status is Error;\n"; }
+    if (_debug) { std::cerr << "osrm_simple.osrm_table: Status is Error;\n"; }
     // asprintf(
     //   &route_result.errors,
     //   "error result: %s %s",
@@ -197,6 +214,6 @@ std::string osrm_table(
       result.values["message"].get<osrm::json::String>().value);
   }
 
-  if (_debug) { std::cerr << "osrm_simple.osrm_route: Returning.\n"; }
+  if (_debug) { std::cerr << "osrm_simple.osrm_table: Returning.\n"; }
   return errors;
 }

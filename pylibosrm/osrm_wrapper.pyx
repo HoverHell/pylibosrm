@@ -4,6 +4,7 @@
 from libcpp cimport bool as c_bool
 from libcpp.string cimport string as c_string
 cimport cython
+from cython cimport view
 from cython.parallel cimport prange
 cimport numpy as cnumpy
 import numpy
@@ -101,6 +102,11 @@ cdef class OSRMWrapper:
             DTYPE[:] from_lon_ar, DTYPE[:] from_lat_ar,
             DTYPE[:] to_lon_ar, DTYPE[:] to_lat_ar,
             mode='duration_seconds', _debug=False):
+        """
+        Route matrix by calling individual `route_one` without GIL.
+
+        Faster for small sizes, automatically parallel.
+        """
         assert mode in ('duration_seconds', 'distance_meters')
         pieceses = [[from_lon_ar, from_lat_ar], [to_lon_ar, to_lat_ar]]
         for pieces in pieceses:
@@ -142,13 +148,16 @@ cdef class OSRMWrapper:
 
         return result
 
-    # @cython.boundscheck(False)  # Deactivate bounds checking for lower overhead
-    # @cython.wraparound(False)  # Deactivate negative indexing for lower overhead
+    @cython.boundscheck(False)  # Deactivate bounds checking for lower overhead
+    @cython.wraparound(False)  # Deactivate negative indexing for lower overhead
     cpdef route_matrix(
             self,
             cnumpy.ndarray from_lon_ar, cnumpy.ndarray from_lat_ar,
             cnumpy.ndarray to_lon_ar, cnumpy.ndarray to_lat_ar,
             mode='duration_seconds', _debug=False):
+
+        if _debug:
+            print("route_matrix: prepare...")
 
         assert mode in ('duration_seconds', 'distance_meters')
         pieceses = [[from_lon_ar, from_lat_ar], [to_lon_ar, to_lat_ar]]
@@ -179,25 +188,45 @@ cdef class OSRMWrapper:
         if not result.flags['C_CONTIGUOUS']:
             result = numpy.ascontiguousarray(result)
 
-        cdef DTYPE[::1] from_lon_memview = from_lon_ar
-        cdef DTYPE[::1] from_lat_memview = from_lon_ar
-        cdef DTYPE[::1] to_lon_memview = to_lon_ar
-        cdef DTYPE[::1] to_lat_memview = to_lon_ar
-        cdef DTYPE[::1] result_memview = result
+        cdef DTYPE[::view.contiguous] from_lon_memview = from_lon_ar
+        cdef DTYPE[::view.contiguous] from_lat_memview = from_lat_ar
+        cdef DTYPE[::view.contiguous] to_lon_memview = to_lon_ar
+        cdef DTYPE[::view.contiguous] to_lat_memview = to_lat_ar
+        cdef DTYPE[:, ::view.contiguous] result_memview = result
+        # Each row is of `tos_size` elements:
+        assert result_memview.strides[0] / result_memview.itemsize == tos_size, dict(
+            strides=result_memview.strides, itemsize=result_memview.itemsize, froms_size=froms_size, tos_size=tos_size)
+        # Each column within row is next to each other:
+        assert result_memview.strides[1] / result_memview.itemsize == 1, dict(
+            strides=result_memview.strides, itemsize=result_memview.itemsize, froms_size=froms_size, tos_size=tos_size)
 
-        cdef c_string c_errors;
+        cdef c_string c_errors
+
+        if _debug:
+            print("route_matrix: from_lon:", from_lon_ar)
+            print("route_matrix: from_lat:", from_lat_ar)
+            print("route_matrix: to_lon:", to_lon_ar)
+            print("route_matrix: to_lat:", to_lat_ar)
+            print("route_matrix: nogil...")
+
         with nogil:
             c_errors = osrm_table(
                 osrm,
                 from_size=froms_size, from_lon=&from_lon_memview[0], from_lat=&from_lat_memview[0],
                 to_size=tos_size, to_lon=&to_lon_memview[0], to_lat=&to_lat_memview[0],
-                route_result=&result_memview[0],
+                route_result=&result_memview[0, 0],
                 mode=mode_c,
                 _debug=_debug_c)
+
+        if _debug:
+            print("route_matrix: postprocess...")
 
         errors = (<bytes>(c_errors)).decode('utf-8', errors='replace')
         if errors:
             raise RouteException(errors)
+
+        if _debug:
+            print("route_matrix: done.")
 
         return result
 
