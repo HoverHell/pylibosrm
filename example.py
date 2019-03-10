@@ -39,10 +39,16 @@ import pylibosrm.osrm_wrapper as ow
 _dbg('init')
 worker = ow.OSRMWrapper(filename, _debug=DEBUG)
 _dbg('route')
-lon1 = 37.7711303
-lat1 = 55.808113
-lon2 = 37.7070137
-lat2 = 55.7969917
+# # Small area
+# lon1 = 37.7711303
+# lat1 = 55.808113
+# lon2 = 37.7070137
+# lat2 = 55.7969917
+# # Half-of-Moscow area.
+lon1 = 37.441942
+lat1 = 55.6604125
+lon2 = 37.7408831
+lat2 = 55.8350469
 result = worker.route_one(
     lon1, lat1, lon2, lat2,
     _debug=DEBUG)
@@ -137,7 +143,7 @@ if not SKIP_PERFTEST:
     _dbg("perf-test...")
     ret_mode = 'duration_seconds'
     import time
-    perf_num = 100 if COMPARE_HTTP else 500
+    perf_num = 100 if COMPARE_HTTP else 1000
     perf_data = make_route_matrix_params(froms=perf_num, tos=perf_num)
     # print("perf_data:", perf_data)
     t1 = monotonic_ns()
