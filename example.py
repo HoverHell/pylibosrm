@@ -9,7 +9,7 @@ DEBUG = True
 def _dbg(msg):
     if not DEBUG:
         return
-    sys.stderr.write(msg)
+    sys.stderr.write(" ======= " + msg)
     sys.stderr.write('\n')
     sys.stderr.flush()
 
