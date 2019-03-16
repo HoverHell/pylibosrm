@@ -2,3 +2,7 @@
 	path = osrm-backend
 	url = https://github.com/Project-OSRM/osrm-backend
 	branch = master
+[submodule "msgpack-c"]
+	path = msgpack-c
+	url = https://github.com/msgpack/msgpack-c
+	branch = master
