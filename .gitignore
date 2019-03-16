@@ -67,3 +67,4 @@ venv/
 # Vim swap files
 *.swp
 pylibosrm/osrm_wrapper.cpp
+osrm_data

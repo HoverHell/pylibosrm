@@ -27,11 +27,15 @@ def _dbg(msg):
 # mkdir osrm_data
 # cd osrm_data
 # wget "http://download.geofabrik.de/russia/${fln}.osm.pbf"
+# # Use osrm from the official docker image:
 # osrm_in_docker() { docker run --rm --name osrm-backend-b -t -v "$(pwd):/data" osrm/osrm-backend "$@"; }
 # osrm_in_docker osrm-extract -p "/opt/${mode}.lua" "/data/${fln}.osm.pbf"
 # osrm_in_docker osrm-partition "/data/${fln}.osrm"
 # osrm_in_docker osrm-customize "/data/${fln}.osrm"
-
+# # Alternatively, use the locally built osrm:
+# ../osrm-backend/build/osrm-extract -p "../osrm-backend/profiles/${mode}.lua" "./${fln}.osm.pbf"
+# ../osrm-backend/build/osrm-partition "./${fln}.osrm"
+# ../osrm-backend/build/osrm-customize "./${fln}.osrm"
 
 filename = "./osrm_data/central-fed-district-latest.osrm"
 _dbg('import')
@@ -170,4 +174,3 @@ _dbg('cleanup...')
 del worker
 gc.collect()
 _dbg('done.')
-
