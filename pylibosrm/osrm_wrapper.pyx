@@ -34,15 +34,15 @@ cdef extern from "osrm_simple.cpp":
 
     route_result_struct osrm_route(
         OSRM *osrm,
-        double from_lon, double from_lat,
-        double to_lon, double to_lat,
+        double src_lon, double src_lat,
+        double dst_lon, double dst_lat,
         c_bool _debug,
     ) nogil
 
     c_string osrm_table(
         OSRM *osrm,
-        uint64_t from_size, double[] from_lon, double[] from_lat,
-        uint64_t to_size, double[] to_lon, double[] to_lat,
+        uint64_t src_size, double[] src_lon, double[] src_lat,
+        uint64_t dst_size, double[] dst_lon, double[] dst_lat,
         double[] route_result,
         int mode,
         c_bool _debug,
@@ -70,8 +70,8 @@ cdef class OSRMWrapper:
 
     cpdef route_one(
             self,
-            double from_lon, double from_lat,
-            double to_lon, double to_lat,
+            double src_lon, double src_lat,
+            double dst_lon, double dst_lat,
             raise_errors=True,
             _debug=None,
     ):
@@ -83,7 +83,7 @@ cdef class OSRMWrapper:
         with nogil:
             route_result = osrm_route(
                 self._osrm_obj,
-                from_lon, from_lat, to_lon, to_lat,
+                src_lon, src_lat, dst_lon, dst_lat,
                 _debug=_debug_c)
         errors = (<bytes>(route_result.errors)).decode('utf-8', errors='replace')
         if errors:
@@ -99,8 +99,8 @@ cdef class OSRMWrapper:
     @cython.wraparound(False)  # Deactivate negative indexing for lower overhead
     cpdef route_matrix_by_one(
             self,
-            DTYPE[:] from_lon_ar, DTYPE[:] from_lat_ar,
-            DTYPE[:] to_lon_ar, DTYPE[:] to_lat_ar,
+            DTYPE[:] src_lon_ar, DTYPE[:] src_lat_ar,
+            DTYPE[:] dst_lon_ar, DTYPE[:] dst_lat_ar,
             mode='duration_seconds', _debug=False):
         """
         Route matrix by calling individual `route_one` without GIL.
@@ -108,7 +108,7 @@ cdef class OSRMWrapper:
         Faster for small sizes, automatically parallel.
         """
         assert mode in ('duration_seconds', 'distance_meters')
-        pieceses = [[from_lon_ar, from_lat_ar], [to_lon_ar, to_lat_ar]]
+        pieceses = [[src_lon_ar, src_lat_ar], [dst_lon_ar, dst_lat_ar]]
         for pieces in pieceses:
             for piece in pieces:
                 # # It's a memoryview here already:
@@ -116,26 +116,27 @@ cdef class OSRMWrapper:
                 # assert piece.dtype == DTYPE_PY
                 assert len(piece.shape) == 1, "should be a 1-d array"
             assert pieces[0].shape[0] == pieces[1].shape[0], "should be of matching size"
-        cdef Py_ssize_t froms_size = from_lon_ar.shape[0]
-        cdef Py_ssize_t tos_size = to_lon_ar.shape[0]
+        cdef Py_ssize_t src_size = src_lon_ar.shape[0]
+        cdef Py_ssize_t dst_size = dst_lon_ar.shape[0]
 
         cdef int mode_c = 115 if mode == 'duration_seconds' else 109
         cdef c_bool _debug_c = _debug
 
-        result = numpy.empty([froms_size, tos_size], dtype=DTYPE_PY)
+        result = numpy.empty([src_size, dst_size], dtype=DTYPE_PY)
 
         cdef OSRM *osrm = self._osrm_obj
 
-        cdef Py_ssize_t froms_pos, tos_pos
+        cdef Py_ssize_t src_pos
+        cdef Py_ssize_t dst_pos
         cdef route_result_struct route_result
         cdef double result_value
         cdef DTYPE[:, :] result_memview = result
-        for froms_pos in prange(froms_size, nogil=True):
-            for tos_pos in prange(tos_size):
+        for src_pos in prange(src_size, nogil=True):
+            for dst_pos in prange(dst_size):
                 route_result = osrm_route(
                     osrm,
-                    from_lon_ar[froms_pos], from_lat_ar[froms_pos],
-                    to_lon_ar[tos_pos], to_lat_ar[tos_pos],
+                    src_lon_ar[src_pos], src_lat_ar[src_pos],
+                    dst_lon_ar[dst_pos], dst_lat_ar[dst_pos],
                     _debug=_debug_c,
                 )
                 if mode_c == 115:
@@ -144,7 +145,7 @@ cdef class OSRMWrapper:
                     result_value = route_result.distance_meters
                 else:
                     result_value = -1
-                result_memview[froms_pos, tos_pos] = result_value
+                result_memview[src_pos, dst_pos] = result_value
 
         return result
 
@@ -152,15 +153,15 @@ cdef class OSRMWrapper:
     @cython.wraparound(False)  # Deactivate negative indexing for lower overhead
     cpdef route_matrix(
             self,
-            cnumpy.ndarray from_lon_ar, cnumpy.ndarray from_lat_ar,
-            cnumpy.ndarray to_lon_ar, cnumpy.ndarray to_lat_ar,
+            cnumpy.ndarray src_lon_ar, cnumpy.ndarray src_lat_ar,
+            cnumpy.ndarray dst_lon_ar, cnumpy.ndarray dst_lat_ar,
             mode='duration_seconds', _debug=False):
 
         if _debug:
             print("route_matrix: prepare...")
 
         assert mode in ('duration_seconds', 'distance_meters')
-        pieceses = [[from_lon_ar, from_lat_ar], [to_lon_ar, to_lat_ar]]
+        pieceses = [[src_lon_ar, src_lat_ar], [dst_lon_ar, dst_lat_ar]]
         for pieces in pieceses:
             for piece in pieces:
                 # # It's a memoryview here already:
@@ -168,52 +169,52 @@ cdef class OSRMWrapper:
                 # assert piece.dtype == DTYPE_PY
                 assert len(piece.shape) == 1, "should be a 1-d array"
             assert pieces[0].shape[0] == pieces[1].shape[0], "should be of matching size"
-        cdef Py_ssize_t froms_size = from_lon_ar.shape[0]
-        cdef Py_ssize_t tos_size = to_lon_ar.shape[0]
+        cdef Py_ssize_t src_size = src_lon_ar.shape[0]
+        cdef Py_ssize_t dst_size = dst_lon_ar.shape[0]
 
         cdef int mode_c = 115 if mode == 'duration_seconds' else 109
         cdef c_bool _debug_c = _debug
         cdef OSRM *osrm = self._osrm_obj
 
-        result = numpy.empty([froms_size, tos_size], dtype=DTYPE_PY)
+        result = numpy.empty([src_size, dst_size], dtype=DTYPE_PY)
 
-        if not from_lon_ar.flags['C_CONTIGUOUS']:
-            from_lon_ar = numpy.ascontiguousarray(from_lon_ar)
-        if not from_lat_ar.flags['C_CONTIGUOUS']:
-            from_lat_ar = numpy.ascontiguousarray(from_lat_ar)
-        if not to_lon_ar.flags['C_CONTIGUOUS']:
-            to_lon_ar = numpy.ascontiguousarray(to_lon_ar)
-        if not to_lat_ar.flags['C_CONTIGUOUS']:
-            to_lat_ar = numpy.ascontiguousarray(to_lat_ar)
+        if not src_lon_ar.flags['C_CONTIGUOUS']:
+            src_lon_ar = numpy.ascontiguousarray(src_lon_ar)
+        if not src_lat_ar.flags['C_CONTIGUOUS']:
+            src_lat_ar = numpy.ascontiguousarray(src_lat_ar)
+        if not dst_lon_ar.flags['C_CONTIGUOUS']:
+            dst_lon_ar = numpy.ascontiguousarray(dst_lon_ar)
+        if not dst_lat_ar.flags['C_CONTIGUOUS']:
+            dst_lat_ar = numpy.ascontiguousarray(dst_lat_ar)
         if not result.flags['C_CONTIGUOUS']:
             result = numpy.ascontiguousarray(result)
 
-        cdef DTYPE[::view.contiguous] from_lon_memview = from_lon_ar
-        cdef DTYPE[::view.contiguous] from_lat_memview = from_lat_ar
-        cdef DTYPE[::view.contiguous] to_lon_memview = to_lon_ar
-        cdef DTYPE[::view.contiguous] to_lat_memview = to_lat_ar
+        cdef DTYPE[::view.contiguous] src_lon_memview = src_lon_ar
+        cdef DTYPE[::view.contiguous] src_lat_memview = src_lat_ar
+        cdef DTYPE[::view.contiguous] dst_lon_memview = dst_lon_ar
+        cdef DTYPE[::view.contiguous] dst_lat_memview = dst_lat_ar
         cdef DTYPE[:, ::view.contiguous] result_memview = result
-        # Each row is of `tos_size` elements:
-        assert result_memview.strides[0] / result_memview.itemsize == tos_size, dict(
-            strides=result_memview.strides, itemsize=result_memview.itemsize, froms_size=froms_size, tos_size=tos_size)
+        # Each row is of `dst_size` elements:
+        assert result_memview.strides[0] / result_memview.itemsize == dst_size, dict(
+            strides=result_memview.strides, itemsize=result_memview.itemsize, src_size=src_size, dst_size=dst_size)
         # Each column within row is next to each other:
         assert result_memview.strides[1] / result_memview.itemsize == 1, dict(
-            strides=result_memview.strides, itemsize=result_memview.itemsize, froms_size=froms_size, tos_size=tos_size)
+            strides=result_memview.strides, itemsize=result_memview.itemsize, src_size=src_size, dst_size=dst_size)
 
         cdef c_string c_errors
 
         if _debug:
-            print("route_matrix: from_lon:", from_lon_ar)
-            print("route_matrix: from_lat:", from_lat_ar)
-            print("route_matrix: to_lon:", to_lon_ar)
-            print("route_matrix: to_lat:", to_lat_ar)
+            print("route_matrix: src_lon:", src_lon_ar)
+            print("route_matrix: src_lat:", src_lat_ar)
+            print("route_matrix: dst_lon:", dst_lon_ar)
+            print("route_matrix: dst_lat:", dst_lat_ar)
             print("route_matrix: nogil...")
 
         with nogil:
             c_errors = osrm_table(
                 osrm,
-                from_size=froms_size, from_lon=&from_lon_memview[0], from_lat=&from_lat_memview[0],
-                to_size=tos_size, to_lon=&to_lon_memview[0], to_lat=&to_lat_memview[0],
+                src_size=src_size, src_lon=&src_lon_memview[0], src_lat=&src_lat_memview[0],
+                dst_size=dst_size, dst_lon=&dst_lon_memview[0], dst_lat=&dst_lat_memview[0],
                 route_result=&result_memview[0, 0],
                 mode=mode_c,
                 _debug=_debug_c)
