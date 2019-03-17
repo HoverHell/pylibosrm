@@ -14,7 +14,7 @@ DEFINES += PYLIBOSRM_LIBRARY
 SOURCES += \
     pylibosrm/osrm_simple.cpp \
     pylibosrm/osrm_wrapper.cpp \
-    pylibosrm/route_cache_sample.cpp
+    pylibosrm/route_cache_helper.cpp
 
 HEADERS +=
 
@@ -65,3 +65,7 @@ LIBS += -lpthread -ltbb -ltbbmalloc -lrt -lz
 QMAKE_CXXFLAGS += -fopenmp
 QMAKE_LFLAGS += -fopenmp
 CONFIG += C++14
+
+DISTFILES += \
+    pylibosrm/route_cache.pyx \
+    pylibosrm/osrm_wrapper.pyx
