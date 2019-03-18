@@ -68,3 +68,4 @@ venv/
 *.swp
 pylibosrm/osrm_wrapper.cpp
 osrm_data
+pylibosrm/route_cache.cpp

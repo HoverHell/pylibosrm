@@ -6,7 +6,10 @@ from libcpp.string cimport string as c_string
 cimport cython
 from cython cimport view
 from cython.parallel cimport prange
+from cython.operator cimport dereference as deref
 from libcpp.unordered_map cimport unordered_map
+from libcpp.pair cimport pair as c_pair
+# from libcpp.iterator cimport iterator as c_iterator
 cimport numpy as cnumpy
 import numpy
 import os
@@ -15,19 +18,20 @@ ctypedef cnumpy.uint64_t uint64_t
 ctypedef cnumpy.float64_t DTYPE
 DTYPE_PY = numpy.float64
 
- ctypedef unordered_map<DTYPE, DTYPE> _dst_lat_to_duration_seconds
- ctypedef unordered_map<DTYPE, _dst_lat_to_duration_seconds> _dst_lon_to_cache
- ctypedef unordered_map<DTYPE, _dst_lon_to_cache> _src_lat_to_cache
- ctypedef unordered_map<DTYPE, _src_lat_to_cache> _src_lon_to_cache
- ctypedef _src_lon_to_cache route_cache_data
+ctypedef unordered_map[DTYPE, DTYPE] _dst_lat_to_duration_seconds
+ctypedef unordered_map[DTYPE, _dst_lat_to_duration_seconds] _dst_lon_to_cache
+ctypedef unordered_map[DTYPE, _dst_lon_to_cache] _src_lat_to_cache
+ctypedef unordered_map[DTYPE, _src_lat_to_cache] _src_lon_to_cache
+ctypedef _src_lon_to_cache route_cache_data
 
-cdef from "route_cache_helper.cpp":
-    route_cache_data load_cache(c_string filename)
-    void dump_cache(route_cache_data cache, c_string filename)
+cdef extern from "route_cache_helper.cpp":
+    cdef route_cache_data load_cache(c_string filename)
+    cdef void dump_cache(route_cache_data cache, c_string filename)
+
 
 cdef class RouteCache:
 
-    route_cache_data cache
+    cdef route_cache_data cache
     cdef object _debug
 
     def __cinit__(self, _debug=False):
@@ -38,7 +42,12 @@ cdef class RouteCache:
 
     @cython.boundscheck(False)  # Deactivate bounds checking for lower overhead
     @cython.wraparound(False)  # Deactivate negative indexing for lower overhead
-    cpdef cache_preprocess(self, src_lon, src_lat, dst_lon, dst_lat):
+    cpdef cache_preprocess(
+            self,
+            cnumpy.ndarray src_lon_ar,
+            cnumpy.ndarray src_lat_ar,
+            cnumpy.ndarray dst_lon_ar,
+            cnumpy.ndarray dst_lat_ar):
         """
         Synopsis:
 
@@ -48,7 +57,7 @@ cdef class RouteCache:
             * Fill a column in the output matrix from cache.
           * Make a result dict:
             * `result_matrix`
-            * `(new_src_lon, new_src_lat, new_dst_lon, new_dst_lat)`
+            * `(new_src_lon_ar, new_src_lat_ar, new_dst_lon_ar, new_dst_lat_ar)`
               * coordinates with at least one unfilled result_matrix value
             * `(src_indexes, dst_indexes)`
               * arrays of at least the same length as new_src_*, new_dst_*,
@@ -61,14 +70,14 @@ cdef class RouteCache:
                 assert piece.dtype == DTYPE_PY
                 assert len(piece.shape) == 1, "should be a 1-d array"
             assert pieces[0].shape[0] == pieces[1].shape[0], "should be of matching size"
-        cdef Py_ssize_t srcs_size = src_lon_ar.shape[0]
-        cdef Py_ssize_t dsts_size = dst_lon_ar.shape[0]
+        cdef Py_ssize_t src_size = src_lon_ar.shape[0]
+        cdef Py_ssize_t dst_size = dst_lon_ar.shape[0]
 
-        result = numpy.full([srcs_size, dsts_size], np.nan, dtype=DTYPE_PY)
+        result = numpy.full([src_size, dst_size], numpy.nan, dtype=DTYPE_PY)
 
         # preallocate the indexmaps to the maximum size with 'zero' value
-        src_indexes = numpy.full([srcs_size], -1, dtype=numpy.uiint64)
-        dst_indexes = numpy.full([dsts_size], -1, dtype=numpy.uiint64)
+        src_indexes = numpy.full([src_size], -1, dtype=numpy.uiint64)
+        dst_indexes = numpy.full([dst_size], -1, dtype=numpy.uiint64)
 
         cdef DTYPE[:] src_lon_memview = src_lon_ar
         cdef DTYPE[:] src_lat_memview = src_lat_ar
@@ -76,35 +85,61 @@ cdef class RouteCache:
         cdef DTYPE[:] dst_lat_memview = dst_lat_ar
         cdef DTYPE[:, :] result_memview = result
 
+        # loopvars
         cdef Py_ssize_t src_pos
         cdef Py_ssize_t dst_pos
+        cdef DTYPE src_lon = 0
+        cdef DTYPE src_lat = 0
+        cdef DTYPE dst_lon = 0
+        cdef DTYPE dst_lat = 0
+        # cdef c_pair[double, _src_lat_to_cache] src_lon_cache_item
+        cdef unordered_map[DTYPE, _src_lat_to_cache].iterator src_lon_cache_item
+        cdef _src_lat_to_cache src_lon_cache
+        cdef unordered_map[DTYPE, _dst_lon_to_cache].iterator src_cache_item
+        cdef _dst_lon_to_cache src_cache
+        cdef unordered_map[DTYPE, _dst_lat_to_duration_seconds].iterator dst_lon_cache_item
+        cdef _dst_lat_to_duration_seconds dst_lon_cache
+        cdef unordered_map[DTYPE, DTYPE].iterator dst_cache_item
 
+        # The most time-consuming loop. Making it as explicit as possible.
         for src_pos in prange(src_size, nogil=True):
-            cdef DTYPE src_lon = src_lon_ar[src_pos]
-            cdef auto src_lon_cache_item = self.cache.find(src_lon)
+            src_lon = src_lon_memview[src_pos]
+            src_lon_cache_item = self.cache.find(src_lon)
             if src_lon_cache_item == self.cache.end():
                 continue
-            cdef auto src_lon_cache = src_lon_cache_item.second
-            cdef DTYPE src_lat = src_lat_ar[src_pos]
-            cdef auto src_cache_item = src_lon_cache.find(src_lat)
+            src_lon_cache = deref(src_lon_cache_item).second
+            src_lat = src_lat_memview[src_pos]
+            src_cache_item = src_lon_cache.find(src_lat)
             if src_cache_item == src_lon_cache.end():
                 continue
-            cdef auto src_cache = src_cache_item.second
+            src_cache = deref(src_cache_item).second
             for dst_pos in prange(dst_size):
-                cdef DTYPE dst_lon = dst_lon_ar[dst_pos]
-                cdef auto dst_lon_cache_item = src_cache.find(dst_lon)
+                dst_lon = dst_lon_memview[dst_pos]
+                dst_lon_cache_item = src_cache.find(dst_lon)
                 if dst_lon_cache_item == src_cache.end():
                     continue
-                auto dst_lon_cache = dst_lon_cache_item.second
-                cdef DTYPE dst_lat = dst_lat_ar[dst_pos]
-                cdef auto dst_cache_item = dst_lon_cache.find(dst_lat)
+                dst_lon_cache = deref(dst_lon_cache_item).second
+                dst_lat = dst_lat_memview[dst_pos]
+                dst_cache_item = dst_lon_cache.find(dst_lat)
                 if dst_cache_item == dst_lon_cache.end():
                     continue
-                result_memview[src_pos, dst_pos] = dst_cache_item.second
+                result_memview[src_pos, dst_pos] = deref(dst_cache_item).second
 
         # ...
         # TODO: new_(src|dst)_(lon|lat), (src|dst)_indexes
-        raise Exception("TODO")
+        new_src_lon_ar = src_lon_ar
+        new_src_lat_ar = src_lat_ar
+        new_dst_lon_ar = dst_lon_ar
+        new_dst_lat_ar = dst_lat_ar
+        return dict(
+            result_matrix=result,
+            new_src_lon_ar=new_src_lon_ar,
+            new_src_lat_ar=new_src_lat_ar,
+            new_dst_lon_ar=new_dst_lon_ar,
+            new_dst_lat_ar=new_dst_lat_ar,
+            src_indexes=src_indexes,
+            dst_indexes=dst_indexes,
+        )
 
     @cython.boundscheck(False)  # Deactivate bounds checking for lower overhead
     @cython.wraparound(False)  # Deactivate negative indexing for lower overhead

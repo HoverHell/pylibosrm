@@ -6,6 +6,17 @@ from distutils.extension import Extension
 import numpy
 
 
+EXT_COMMON = dict(
+    language="c++",
+    extra_compile_args=[
+        '-fopenmp',
+        '-std=c++14',
+    ],
+    extra_link_args=[
+        '-fopenmp',
+    ],
+)
+
 SETUP_KWARGS = dict(
     name='pylibosrm',
     version='0.1.2',
@@ -19,16 +30,7 @@ SETUP_KWARGS = dict(
     ext_modules=cythonize([
         Extension(
             "pylibosrm.osrm_wrapper",
-            sources=[
-                "pylibosrm/osrm_wrapper.pyx"
-            ],
-            extra_compile_args=[
-                '-fopenmp',
-                '-std=c++14',
-            ],
-            extra_link_args=[
-                '-fopenmp',
-            ],
+            sources=["pylibosrm/osrm_wrapper.pyx"],
             include_dirs=[
                 numpy.get_include(),
                 "./osrm-backend/include",
@@ -52,8 +54,19 @@ SETUP_KWARGS = dict(
                 'rt',
                 'z',
             ],
-            language="c++",
-        ),
+            **EXT_COMMON),
+        Extension(
+            "pylibosrm.route_cache",
+            sources=["pylibosrm/route_cache.pyx"],
+            include_dirs=[
+                numpy.get_include(),
+                './msgpack-c/include/',
+            ],
+            library_dirs=[
+            ],
+            libraries=[
+            ],
+            **EXT_COMMON),
     ]),
     description=(
         'libosrm Cython wrapper'),
