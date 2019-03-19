@@ -28,16 +28,18 @@ ctypedef _src_lon_to_cache route_cache_data
 # cdef extern from "std_mutex.h":
 cdef extern from "mutex":
     cdef cppclass mutex:
-        pass
+        void lock() nogil except +
+        c_bool try_lock() nogil except +
+        void unlock() nogil except +
 
 
 cdef extern from "route_cache_helper.cpp":
-    cdef route_cache_data load_cache(c_string filename)
-    cdef void dump_cache(route_cache_data cache, c_string filename)
+    cdef route_cache_data load_cache(c_string filename) nogil except +
+    cdef void dump_cache(route_cache_data cache, c_string filename) nogil except +
     cdef cppclass MutexMap:
         # MutexMap() except +
-        mutex* get_mutex(void* ptr)
-        size_t cleanup_mutexes()
+        mutex* get_mutex(void* ptr) nogil except +
+        size_t cleanup_mutexes() nogil except +
     cdef MutexMap MUTEX_MAP
 
 
@@ -215,23 +217,31 @@ cdef class RouteCache:
         cdef mutex *src_cache_mutex
 
         with nogil:
-            with c_lock_guard(cache_mutex):
+            cache_mutex.lock()
+            try:
                 for src_pos in range(src_size):
                     src_lon = src_lon_memview[src_pos]
                     src_lat = src_lat_memview[src_pos]
-                    self.cache[src_lon][src_lat] = {}
+                    # self.cache[src_lon][src_lat] = {}
+                    self.cache[src_lon][src_lat]
+            finally:
+                cache_mutex.unlock()
             for src_pos in prange(src_size):
+                # TODO?: use `….at(…).second` to ensure this is only-reading?
                 src_lon = src_lon_memview[src_pos]
                 src_lat = src_lat_memview[src_pos]
                 src_cache = self.cache[src_lon][src_lat]
                 # NOTE: this complicated dynamic mutexing might actually not be necessary,
                 # since it is not particularly useful to run multiple `cache_update`s in parallel.
-                src_cache_mutex = MUTEX_MAP.get_mutex(ref(src_cache))
-                with c_lock_guard(src_cache_mutex):
+                src_cache_mutex = MUTEX_MAP.get_mutex(&src_cache)
+                src_cache_mutex.lock()
+                try:
                     for dst_pos in range(dst_size):
                         dst_lon = dst_lon_memview[dst_pos]
                         dst_lat = dst_lat_memview[dst_pos]
                         src_cache[dst_lon][dst_lat] = results_memview[src_pos, dst_pos]
+                finally:
+                    src_cache_mutex.unlock()
 
     @staticmethod
     def drop_fake_nan(ar, negone=False):

@@ -30,14 +30,14 @@ cdef extern from "osrm_simple.cpp":
         double duration_seconds
         c_string errors
 
-    OSRM *osrm_initialize(char *filename, c_bool _debug)
+    OSRM *osrm_initialize(char *filename, c_bool _debug) nogil except +
 
     route_result_struct osrm_route(
         OSRM *osrm,
         double src_lon, double src_lat,
         double dst_lon, double dst_lat,
         c_bool _debug,
-    ) nogil
+    ) nogil except +
 
     c_string osrm_table(
         OSRM *osrm,
@@ -46,7 +46,7 @@ cdef extern from "osrm_simple.cpp":
         double[] route_result,
         int mode,
         c_bool _debug,
-    ) nogil
+    ) nogil except +
 
 
 class RouteException(Exception):
