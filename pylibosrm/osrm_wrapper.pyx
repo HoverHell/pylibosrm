@@ -19,12 +19,12 @@ ctypedef cnumpy.float64_t DTYPE
 DTYPE_PY = numpy.float64
 
 
-cdef extern from "osrm/osrm.hpp" namespace "osrm":
+cdef extern from "osrm/osrm.hpp" namespace "osrm" nogil:
     cppclass OSRM:
         pass
 
 
-cdef extern from "osrm_simple.cpp":
+cdef extern from "osrm_simple.cpp" nogil:
     struct route_result_struct:
         double distance_meters
         double duration_seconds

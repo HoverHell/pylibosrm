@@ -26,11 +26,11 @@ ctypedef _src_lon_to_cache route_cache_data
 
 
 # cdef extern from "std_mutex.h":
-cdef extern from "mutex":
+cdef extern from "<mutex>" namespace "std" nogil:
     cdef cppclass mutex:
-        void lock() nogil except +
-        c_bool try_lock() nogil except +
-        void unlock() nogil except +
+        void lock() except +
+        c_bool try_lock() except +
+        void unlock() except +
 
 
 cdef extern from "route_cache_helper.cpp":
@@ -208,7 +208,7 @@ cdef class RouteCache:
         # cdef unordered_map[DTYPE, _src_lat_to_cache].iterator src_lon_cache_item
         # cdef _src_lat_to_cache src_lon_cache
         # cdef unordered_map[DTYPE, _dst_lon_to_cache].iterator src_cache_item
-        cdef _dst_lon_to_cache src_cache
+        cdef _dst_lon_to_cache * src_cache
         # cdef unordered_map[DTYPE, _dst_lat_to_duration_seconds].iterator dst_lon_cache_item
         # cdef _dst_lat_to_duration_seconds dst_lon_cache
         # cdef unordered_map[DTYPE, DTYPE].iterator dst_cache_item
@@ -230,7 +230,7 @@ cdef class RouteCache:
                 # TODO?: use `….at(…).second` to ensure this is only-reading?
                 src_lon = src_lon_memview[src_pos]
                 src_lat = src_lat_memview[src_pos]
-                src_cache = self.cache[src_lon][src_lat]
+                src_cache = &self.cache[src_lon][src_lat]
                 # NOTE: this complicated dynamic mutexing might actually not be necessary,
                 # since it is not particularly useful to run multiple `cache_update`s in parallel.
                 src_cache_mutex = MUTEX_MAP.get_mutex(&src_cache)
@@ -239,7 +239,7 @@ cdef class RouteCache:
                     for dst_pos in range(dst_size):
                         dst_lon = dst_lon_memview[dst_pos]
                         dst_lat = dst_lat_memview[dst_pos]
-                        src_cache[dst_lon][dst_lat] = results_memview[src_pos, dst_pos]
+                        deref(src_cache)[dst_lon][dst_lat] = results_memview[src_pos, dst_pos]
                 finally:
                     src_cache_mutex.unlock()
 
@@ -247,11 +247,11 @@ cdef class RouteCache:
     def drop_fake_nan(ar, negone=False):
         selection = ~numpy.isnan(ar)
         dtype = ar.dtype
-        if dtype is numpy.uint64 or dtype is numpy.uint32:
+        if dtype in (numpy.uint64, numpy.uint32, numpy.int64, numpy.int32):
             maxval = numpy.iinfo(dtype).max
-            selection = selection | (ar != maxval)
+            selection = selection & (ar != maxval)
         elif negone:
-            selection = selection | (ar != -1)
+            selection = selection & (ar != -1)
         return ar[selection]
 
     cpdef cache_postprocess(
