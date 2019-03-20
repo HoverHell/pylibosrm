@@ -91,8 +91,8 @@ cdef class RouteCache:
         result = numpy.full([src_size, dst_size], numpy.nan, dtype=DTYPE_PY)
 
         # preallocate the indexmaps to the maximum size with 'zero' value
-        src_indexes = numpy.full([src_size], -1, dtype=numpy.uiint64)
-        dst_indexes = numpy.full([dst_size], -1, dtype=numpy.uiint64)
+        src_indexes = numpy.full([src_size], -1, dtype=numpy.uint64)
+        dst_indexes = numpy.full([dst_size], -1, dtype=numpy.uint64)
 
         cdef DTYPE[:] src_lon_memview = src_lon_ar
         cdef DTYPE[:] src_lat_memview = src_lat_ar
@@ -108,11 +108,11 @@ cdef class RouteCache:
         cdef DTYPE dst_lon = 0
         cdef DTYPE dst_lat = 0
         cdef unordered_map[DTYPE, _src_lat_to_cache].iterator src_lon_cache_item
-        cdef _src_lat_to_cache src_lon_cache
+        cdef _src_lat_to_cache * src_lon_cache
         cdef unordered_map[DTYPE, _dst_lon_to_cache].iterator src_cache_item
-        cdef _dst_lon_to_cache src_cache
+        cdef _dst_lon_to_cache * src_cache
         cdef unordered_map[DTYPE, _dst_lat_to_duration_seconds].iterator dst_lon_cache_item
-        cdef _dst_lat_to_duration_seconds dst_lon_cache
+        cdef _dst_lat_to_duration_seconds * dst_lon_cache
         cdef unordered_map[DTYPE, DTYPE].iterator dst_cache_item
 
         # The most time-consuming loop. Making it as explicit as possible.
@@ -121,18 +121,18 @@ cdef class RouteCache:
             src_lon_cache_item = self.cache.find(src_lon)
             if src_lon_cache_item == self.cache.end():
                 continue
-            src_lon_cache = deref(src_lon_cache_item).second
+            src_lon_cache = &(deref(src_lon_cache_item).second)
             src_lat = src_lat_memview[src_pos]
             src_cache_item = src_lon_cache.find(src_lat)
             if src_cache_item == src_lon_cache.end():
                 continue
-            src_cache = deref(src_cache_item).second
+            src_cache = &(deref(src_cache_item).second)
             for dst_pos in prange(dst_size):
                 dst_lon = dst_lon_memview[dst_pos]
                 dst_lon_cache_item = src_cache.find(dst_lon)
                 if dst_lon_cache_item == src_cache.end():
                     continue
-                dst_lon_cache = deref(dst_lon_cache_item).second
+                dst_lon_cache = &(deref(dst_lon_cache_item).second)
                 dst_lat = dst_lat_memview[dst_pos]
                 dst_cache_item = dst_lon_cache.find(dst_lat)
                 if dst_cache_item == dst_lon_cache.end():
