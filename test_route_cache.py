@@ -63,17 +63,21 @@ cache_effective = _sortdicts([
 assert cache_expected == cache_effective
 
 print("Repeatedly poking cache_preprocess...")
-iteration = 0
+iterations = 997
 t1 = monotonic_ns()
-for iteration in range(900):  # Ensure it works reliably.
+counter = 0
+for _ in range(iterations):  # Ensure it works reliably.
     pp1 = cacher.cache_preprocess(**coordses)
     result_matrix = pp1['result_matrix']
     # Ensure the cache was successfully applied:
     result_matrix_filled_part = result_matrix[src_indexes][:, dst_indexes]
     assert numpy.array_equal(result_matrix_filled_part, new_result_matrix), (iteration, result_matrix_filled_part)
+    counter += numpy.sum(result_matrix_filled_part)
 t2 = monotonic_ns()
-print("Repeatedly poking cache_preprocess: done (%d repeats, %.4fs per loop)." % (iteration + 1, (t2 - t1) / 1e9 / (iteration + 1)))
-
+td = (t2 - t1) / 1e9
+assert abs(numpy.sum(result_matrix_filled_part) * iterations - counter) < 1e-8, "precision check"
+print("Repeatedly poking cache_preprocess: done (%d repeats, %.3fs, %.6fs per loop, checksum %.3f)." % (
+    iterations, td, td / iterations, counter))
 pp1 = cacher.cache_preprocess(**coordses)
 
 # # Useful slicings:
