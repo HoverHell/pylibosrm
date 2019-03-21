@@ -551,12 +551,15 @@ cdef class RouteCache:
             dst_lat_ar=dst_lat_ar)
         cdef uint64 ts1 = monotonic_ns()
         result_matrix = self.route_from_cache(**base_data)
+        cdef uint64 total_values = result_matrix.shape[0] * result_matrix.shape[1]
+        cdef uint64 cached_values = total_values - numpy.isnan(result_matrix).sum()
         cdef uint64 ts2 = monotonic_ns()
         routings, routings_case = self.split_unrouted(
             result_matrix=result_matrix,
             **base_data)
         cdef uint64 ts3 = monotonic_ns()
 
+        cdef uint64 routed_values = 0
         cdef uint64 time_routes = 0
         cdef uint64 time_cache_updates = 0
         cdef uint64 time_result_merges = 0
@@ -569,6 +572,9 @@ cdef class RouteCache:
         for routing in routings:
             if not routing:
                 continue
+            routed_values += (
+                routing['params']['src_lon_ar'].shape[0] *
+                routing['params']['dst_lon_ar'].shape[0])
             ts4_1 = monotonic_ns()
             routing['params']['new_result_matrix'] = osrm.route_matrix(
                 mode='duration_seconds',
@@ -618,6 +624,9 @@ cdef class RouteCache:
                 routings=routings,
             ),
             routings_case=routings_case,
+            cached_values=cached_values,
+            routed_values=routed_values,
+            total_values=total_values,
         )
         cdef uint64 ts6 = monotonic_ns()
         details['timings']['auxilary_1'] = ts6 - ts5
