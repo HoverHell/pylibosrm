@@ -33,7 +33,6 @@ ctypedef unordered_map[DTYPE, _src_lat_to_cache] _src_lon_to_cache
 ctypedef _src_lon_to_cache route_cache_data
 
 
-# cdef extern from "std_mutex.h":
 cdef extern from "<mutex>" namespace "std" nogil:
     cdef cppclass mutex:
         void lock() except +
@@ -41,7 +40,24 @@ cdef extern from "<mutex>" namespace "std" nogil:
         void unlock() except +
 
 
-cdef extern from "route_cache_helper.cpp":
+cdef extern from "<shared_mutex>" namespace "std" nogil:
+    # Note: `shared_mutex` without `..._timed_...` support only appeared in C++17
+    cdef cppclass shared_timed_mutex:
+        void lock() except +
+        c_bool try_lock() except +
+        # c_bool try_lock_for(const std::chrono::duration<Rep,Period>& timeout_duration)
+        # c_bool try_lock_until(const std::chrono::time_point<Clock,Duration>& timeout_time)
+        void unlock() except +
+
+        void lock_shared() except +
+        c_bool try_lock_shared() except +
+        # c_bool try_lock_shared_for(const std::chrono::duration<Rep,Period>& timeout_duration)
+        # c_bool try_lock_shared_until( const std::chrono::time_point<Clock,Duration>& timeout_time)
+        void unlock_shared() except +
+
+
+
+cdef extern from "route_cache_helper.cpp" nogil:
     cdef route_cache_data load_cache(c_string filename) nogil except +
     cdef void dump_cache(route_cache_data cache, c_string filename) nogil except +
     cdef cppclass MutexMap:
@@ -118,6 +134,7 @@ cdef class RouteCache:
     """
 
     cdef route_cache_data cache
+    cdef shared_timed_mutex *cache_mutex
     cdef object _debug
     cdef object sur_too_flat
     cdef object sur_split_quotient
@@ -125,6 +142,7 @@ cdef class RouteCache:
     def __cinit__(self, _debug=False):
         self.sur_too_flat = 8
         self.sur_split_quotient = 0.85
+        self.cache_mutex = new shared_timed_mutex()
 
     def __init__(self, _debug=False):
         self._debug = _debug
@@ -225,28 +243,34 @@ cdef class RouteCache:
         cdef _dst_lat_to_duration_seconds * dst_lon_cache
         cdef unordered_map[DTYPE, DTYPE].iterator dst_cache_item
 
-        for src_pos in prange(src_size, nogil=True):
-            src_lon = src_lon_memview[src_pos]
-            src_lon_cache_item = self.cache.find(src_lon)
-            if src_lon_cache_item == self.cache.end():
-                continue
-            src_lon_cache = &(deref(src_lon_cache_item).second)
-            src_lat = src_lat_memview[src_pos]
-            src_cache_item = src_lon_cache.find(src_lat)
-            if src_cache_item == src_lon_cache.end():
-                continue
-            src_cache = &(deref(src_cache_item).second)
-            for dst_pos in prange(dst_size):
-                dst_lon = dst_lon_memview[dst_pos]
-                dst_lon_cache_item = src_cache.find(dst_lon)
-                if dst_lon_cache_item == src_cache.end():
-                    continue
-                dst_lon_cache = &(deref(dst_lon_cache_item).second)
-                dst_lat = dst_lat_memview[dst_pos]
-                dst_cache_item = dst_lon_cache.find(dst_lat)
-                if dst_cache_item == dst_lon_cache.end():
-                    continue
-                result_memview[src_pos, dst_pos] = deref(dst_cache_item).second
+        cdef shared_timed_mutex *cache_mutex = self.cache_mutex
+        with nogil:
+            cache_mutex.lock_shared()
+            try:
+                for src_pos in prange(src_size):
+                    src_lon = src_lon_memview[src_pos]
+                    src_lon_cache_item = self.cache.find(src_lon)
+                    if src_lon_cache_item == self.cache.end():
+                        continue
+                    src_lon_cache = &(deref(src_lon_cache_item).second)
+                    src_lat = src_lat_memview[src_pos]
+                    src_cache_item = src_lon_cache.find(src_lat)
+                    if src_cache_item == src_lon_cache.end():
+                        continue
+                    src_cache = &(deref(src_cache_item).second)
+                    for dst_pos in prange(dst_size):
+                        dst_lon = dst_lon_memview[dst_pos]
+                        dst_lon_cache_item = src_cache.find(dst_lon)
+                        if dst_lon_cache_item == src_cache.end():
+                            continue
+                        dst_lon_cache = &(deref(dst_lon_cache_item).second)
+                        dst_lat = dst_lat_memview[dst_pos]
+                        dst_cache_item = dst_lon_cache.find(dst_lat)
+                        if dst_cache_item == dst_lon_cache.end():
+                            continue
+                        result_memview[src_pos, dst_pos] = deref(dst_cache_item).second
+            finally:
+                cache_mutex.unlock_shared()
 
         return result
 
@@ -429,7 +453,7 @@ cdef class RouteCache:
         # cdef _dst_lat_to_duration_seconds dst_lon_cache
         # cdef unordered_map[DTYPE, DTYPE].iterator dst_cache_item
 
-        cdef mutex *cache_mutex = MUTEX_MAP.get_mutex(&self.cache)
+        cdef shared_timed_mutex *cache_mutex = self.cache_mutex
         cdef mutex *src_cache_mutex
 
         with nogil:
@@ -637,6 +661,5 @@ cdef class RouteCache:
         result_matrix, _ = self.route_matrix_verbose(*args, **kwargs)
         return result_matrix
 
-    # # TODO?:
-    # cdef __dealloc__(self):
-    #     pass
+    def __dealloc__(self):
+        del self.cache_mutex

@@ -25,6 +25,7 @@ cdef extern from "osrm/osrm.hpp" namespace "osrm" nogil:
 
 
 cdef extern from "osrm_simple.cpp" nogil:
+
     struct route_result_struct:
         double distance_meters
         double duration_seconds
@@ -54,6 +55,7 @@ class RouteException(Exception):
 
 
 cdef class OSRMWrapper:
+
     cdef OSRM *_osrm_obj
     cdef str filename
     cdef object _debug
@@ -231,6 +233,5 @@ cdef class OSRMWrapper:
 
         return result
 
-    # # TODO:
-    # cdef __dealloc__(self):
-    #     pass
+    def __dealloc__(self):
+        del self._osrm_obj
