@@ -2,6 +2,7 @@
 # cython: language_level=3
 
 from libc.stdint cimport uint64_t as uint64
+from libc.stdio cimport printf
 
 from posix.time cimport timespec, clock_gettime, CLOCK_MONOTONIC, CLOCK_REALTIME
 
@@ -21,6 +22,8 @@ cimport numpy as cnumpy
 import os
 
 import numpy
+
+cdef c_bool _DEBUG_ALL = False
 
 ctypedef cnumpy.uint64_t uint64_t
 ctypedef cnumpy.float64_t DTYPE
@@ -154,6 +157,7 @@ cdef class RouteCache:
         cnumpy.ndarray dst_lon_ar,
         cnumpy.ndarray dst_lat_ar,
         cnumpy.ndarray result_matrix=None,
+        check_uniq=False,
     ):
         pieceses = [
             [('src_lon_ar', src_lon_ar), ('src_lat_ar', src_lat_ar)],
@@ -166,10 +170,25 @@ cdef class RouteCache:
                     raise ValueError("Invalid dtype", dict(name=name, got=piece.dtype, expected=DTYPE_PY))
                 if piece.ndim != 1:
                     raise ValueError("Should be a 1-d array", name)
-            if pieces[0][1].shape != pieces[1][1].shape:
+            pieces_names = [piece[0] for piece in pieces]
+            pieces_ars = [piece[1] for piece in pieces]
+            if pieces_ars[0].shape != pieces_ars[1].shape:
                 raise ValueError(
                     "Should be of matching sizes",
-                    dict(names=(pieces[0][0], pieces[1][0])))
+                    dict(names=pieces_names))
+            if check_uniq:
+                pieces_full_ar = numpy.array(pieces_ars)
+                pieces_unique_ar, pieces_unique_count_ar = numpy.unique(
+                    pieces_full_ar, axis=1, return_counts=True)
+                if pieces_full_ar.size != pieces_unique_ar.size:
+                    duplicated = (
+                        numpy.concatenate([
+                            pieces_unique_ar,
+                            numpy.array([pieces_unique_count_ar])], axis=0
+                        )[:, pieces_unique_count_ar > 1])
+                    raise ValueError(
+                        "Should be unique",
+                        dict(names=pieces_names, duplicated=duplicated.T))
 
         if result_matrix is not None:
             name = "result_matrix"
@@ -231,6 +250,7 @@ cdef class RouteCache:
         # loopvars
         cdef Py_ssize_t src_pos
         cdef Py_ssize_t dst_pos
+        cdef Py_ssize_t hitcount = 0
         cdef DTYPE src_lon = 0
         cdef DTYPE src_lat = 0
         cdef DTYPE dst_lon = 0
@@ -245,21 +265,37 @@ cdef class RouteCache:
 
         cdef shared_timed_mutex *cache_mutex = self.cache_mutex
         with nogil:
+            if _DEBUG_ALL:
+                printf(b"route_from_cache: cache_mutex.lock_shared();\n")
+            # Shared lock to ensure no writing is being done on the cache at
+            # the same time (but allow other reading).
             cache_mutex.lock_shared()
             try:
                 for src_pos in prange(src_size):
                     src_lon = src_lon_memview[src_pos]
+                    if _DEBUG_ALL:
+                        printf(
+                            b"route_from_cache: self.cache.find(src_pos=%d, src_lon=%.7f);\n",
+                            src_pos, src_lon)
                     src_lon_cache_item = self.cache.find(src_lon)
                     if src_lon_cache_item == self.cache.end():
                         continue
                     src_lon_cache = &(deref(src_lon_cache_item).second)
                     src_lat = src_lat_memview[src_pos]
+                    if _DEBUG_ALL:
+                        printf(
+                            b"route_from_cache: src_lon_cache.find(src_lat=%.7f);\n",
+                            src_lat)
                     src_cache_item = src_lon_cache.find(src_lat)
                     if src_cache_item == src_lon_cache.end():
                         continue
                     src_cache = &(deref(src_cache_item).second)
                     for dst_pos in prange(dst_size):
                         dst_lon = dst_lon_memview[dst_pos]
+                        if _DEBUG_ALL:
+                            printf(
+                                b"route_from_cache: src_cache.find(dst_pos=%d, dst_lon=%.7f);\n",
+                                dst_pos, dst_lon)
                         dst_lon_cache_item = src_cache.find(dst_lon)
                         if dst_lon_cache_item == src_cache.end():
                             continue
@@ -269,7 +305,10 @@ cdef class RouteCache:
                         if dst_cache_item == dst_lon_cache.end():
                             continue
                         result_memview[src_pos, dst_pos] = deref(dst_cache_item).second
+                        hitcount += 1
             finally:
+                if _DEBUG_ALL:
+                    printf(b"route_from_cache: cache_mutex.unlock_shared(); hitcount=%d;\n", hitcount)
                 cache_mutex.unlock_shared()
 
         return result
@@ -457,6 +496,10 @@ cdef class RouteCache:
         cdef mutex *src_cache_mutex
 
         with nogil:
+            if _DEBUG_ALL:
+                printf(b"cache_update: prefill: cache_mutex.lock();\n")
+
+            # Exclusive access to the outer layer of the cache.
             cache_mutex.lock()
             try:
                 for src_pos in range(src_size):
@@ -465,23 +508,47 @@ cdef class RouteCache:
                     # self.cache[src_lon][src_lat] = {}
                     self.cache[src_lon][src_lat]
             finally:
+                if _DEBUG_ALL:
+                    printf(b"cache_update: prefill: cache_mutex.unlock();\n")
                 cache_mutex.unlock()
-            for src_pos in prange(src_size):
-                # TODO?: use `….at(…).second` to ensure this is only-reading?
-                src_lon = src_lon_memview[src_pos]
-                src_lat = src_lat_memview[src_pos]
-                src_cache = &self.cache[src_lon][src_lat]
-                # NOTE: this complicated dynamic mutexing might actually not be necessary,
-                # since it is not particularly useful to run multiple `cache_update`s in parallel.
-                src_cache_mutex = MUTEX_MAP.get_mutex(&src_cache)
-                src_cache_mutex.lock()
-                try:
-                    for dst_pos in range(dst_size):
-                        dst_lon = dst_lon_memview[dst_pos]
-                        dst_lat = dst_lat_memview[dst_pos]
-                        deref(src_cache)[dst_lon][dst_lat] = results_memview[src_pos, dst_pos]
-                finally:
-                    src_cache_mutex.unlock()
+
+            # This could be `lock_shared`, i.e. a non-exclusive access to the
+            # top with exclusive access to one item in the inner layer of the
+            # cache.
+            # However, that is harder and might as well be slower.
+            if _DEBUG_ALL:
+                printf(b"cache_update: cache_mutex.lock() #2;\n")
+            cache_mutex.lock()
+            try:
+                for src_pos in prange(src_size):
+                    # TODO?: use `….at(…).second` to ensure this is only-reading?
+                    src_lon = src_lon_memview[src_pos]
+                    src_lat = src_lat_memview[src_pos]
+                    src_cache = &self.cache[src_lon][src_lat]
+                    # Note: this complicated dynamic mutexing might sometimes not be necessary.
+                    # It is not particularly useful to run multiple `cache_update`s in parallel.
+                    # However, the src_... values can (currently) be duplicated.
+                    src_cache_mutex = MUTEX_MAP.get_mutex(src_cache)
+                    if _DEBUG_ALL:
+                        printf(
+                            b"cache_update: src_cache_mutex<@%d -> %.7f,%.7f -> @%p -> @%p>.lock();\n",
+                            src_pos, src_lon, src_lat, <void*>src_cache, <void*>src_cache_mutex)
+                    src_cache_mutex.lock()
+                    try:
+                        for dst_pos in range(dst_size):
+                            dst_lon = dst_lon_memview[dst_pos]
+                            dst_lat = dst_lat_memview[dst_pos]
+                            deref(src_cache)[dst_lon][dst_lat] = results_memview[src_pos, dst_pos]
+                    finally:
+                        if _DEBUG_ALL:
+                            printf(
+                                b"cache_update: src_cache_mutex<@%d -> ...>.unlock();\n",
+                                src_pos)
+                        src_cache_mutex.unlock()
+            finally:
+                if _DEBUG_ALL:
+                    printf(b"cache_update: cache_mutex.unlock() #2;\n")
+                cache_mutex.unlock()
 
     @staticmethod
     def drop_fake_nan(ar, negone=False):
