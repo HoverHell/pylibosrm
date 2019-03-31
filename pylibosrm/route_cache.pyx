@@ -277,7 +277,7 @@ cdef class RouteCache:
                     src_lon = src_lon_memview[src_pos]
                     if _DEBUG_ALL:
                         printf(
-                            b"route_from_cache: self.cache.find(src_pos=%d, src_lon=%.7f);\n",
+                            b"route_from_cache: self.cache.find(src_pos=%ld, src_lon=%.7f);\n",
                             src_pos, src_lon)
                     src_lon_cache_item = self.cache.find(src_lon)
                     if src_lon_cache_item == self.cache.end():
@@ -296,7 +296,7 @@ cdef class RouteCache:
                         dst_lon = dst_lon_memview[dst_pos]
                         if _DEBUG_ALL:
                             printf(
-                                b"route_from_cache: src_cache.find(dst_pos=%d, dst_lon=%.7f);\n",
+                                b"route_from_cache: src_cache.find(dst_pos=%ld, dst_lon=%.7f);\n",
                                 dst_pos, dst_lon)
                         dst_lon_cache_item = src_cache.find(dst_lon)
                         if dst_lon_cache_item == src_cache.end():
@@ -310,7 +310,7 @@ cdef class RouteCache:
                         hitcount += 1
             finally:
                 if _DEBUG_ALL:
-                    printf(b"route_from_cache: cache_mutex.unlock_shared(); hitcount=%d;\n", hitcount)
+                    printf(b"route_from_cache: cache_mutex.unlock_shared(); hitcount=%ld;\n", hitcount)
                 cache_mutex.unlock_shared()
 
         return result
@@ -534,7 +534,7 @@ cdef class RouteCache:
                     src_cache_mutex = MUTEX_MAP.get_mutex(src_cache)
                     if _DEBUG_ALL:
                         printf(
-                            b"cache_update: src_cache_mutex<@%d -> %.7f,%.7f -> @%p -> @%p>.lock();\n",
+                            b"cache_update: src_cache_mutex<@%ld -> %.7f,%.7f -> @%p -> @%p>.lock();\n",
                             src_pos, src_lon, src_lat, <void*>src_cache, <void*>src_cache_mutex)
                     src_cache_mutex.lock()
                     try:
@@ -545,7 +545,7 @@ cdef class RouteCache:
                     finally:
                         if _DEBUG_ALL:
                             printf(
-                                b"cache_update: src_cache_mutex<@%d -> ...>.unlock();\n",
+                                b"cache_update: src_cache_mutex<@%ld -> ...>.unlock();\n",
                                 src_pos)
                         src_cache_mutex.unlock()
             finally:

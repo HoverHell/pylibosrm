@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
+// #include <libgen.h>
 #include <msgpack.hpp>
 
 typedef std::unordered_map<double, double> _dst_lat_to_duration_seconds;
@@ -41,8 +42,19 @@ route_cache_data load_cache(std::string filename) {
 void dump_cache(route_cache_data cache, std::string filename) {
     std::stringstream fstream;
     msgpack::pack(fstream, cache);
-    std::ofstream fobj(filename);
+    auto filename_tmp = filename + ".wip.tmp";
+    // TODO: this should've been something like
+    // auto filename_tmp = dirname(filename) + '.wip_' + basename(filename) + '.tmp';
+    // ... with randomness and possible delete-on-error.
+    std::ofstream fobj(filename_tmp);
     fobj << fstream.rdbuf();
+    fobj.close();
+    int ret = std::rename(filename_tmp.c_str(), filename.c_str());
+    if(ret) {
+      throw std::runtime_error(
+        "Could not rename written cache file '" + filename_tmp +
+        "' to the requested path '" + filename + "': " +
+        std::strerror(ret) + "."); }
 }
 
 /* A hashmap of memory address -> mutex, to be used for the `_dst_lon_to_cache` variables. */
