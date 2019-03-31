@@ -23,7 +23,9 @@ import os
 
 import numpy
 
+
 cdef c_bool _DEBUG_ALL = False
+
 
 ctypedef cnumpy.uint64_t uint64_t
 ctypedef cnumpy.float64_t DTYPE
@@ -642,9 +644,15 @@ cdef class RouteCache:
             dst_lon_ar=dst_lon_ar,
             dst_lat_ar=dst_lat_ar)
         cdef uint64 ts1 = monotonic_ns()
+        if _DEBUG_ALL:
+            printf(b"route_cache: route_from_cache()...\n")
         result_matrix = self.route_from_cache(**base_data)
+        if _DEBUG_ALL:
+            printf(b"route_cache: counts...\n")
         cdef uint64 total_values = result_matrix.shape[0] * result_matrix.shape[1]
         cdef uint64 cached_values = total_values - numpy.isnan(result_matrix).sum()
+        if _DEBUG_ALL:
+            printf(b"route_cache: split_unrouted...\n")
         cdef uint64 ts2 = monotonic_ns()
         routings, routings_case = self.split_unrouted(
             result_matrix=result_matrix,
@@ -660,13 +668,22 @@ cdef class RouteCache:
         cdef uint64 ts4_3 = 0
         cdef uint64 ts4_4 = 0
 
-        # TODO?: prange? (might need to adjust for the timing counters though)
+        if _DEBUG_ALL:
+            printf(b"route_cache: process routings...\n")
+
+        # TODO?: prange?
         for routing in routings:
             if not routing:
                 continue
+
+            if _DEBUG_ALL:
+                printf(b"route_cache: process routings: prepare...\n")
             routed_values += (
                 routing['params']['src_lon_ar'].shape[0] *
                 routing['params']['dst_lon_ar'].shape[0])
+
+            if _DEBUG_ALL:
+                printf(b"route_cache: process routings: route_matrix...\n")
             ts4_1 = monotonic_ns()
             routing['params']['new_result_matrix'] = osrm.route_matrix(
                 mode='duration_seconds',
@@ -674,10 +691,16 @@ cdef class RouteCache:
                 **routing['params'])  # (src|dst)_(lon|lat)_ar=new_(src|dst)_(lon|lat)_ar,
             ts4_2 = monotonic_ns()
             time_routes += (ts4_2 - ts4_1)
+
             if update_cache:
+                if _DEBUG_ALL:
+                    printf(b"route_cache: process routings: cache_update...\n")
                 self.cache_update(**routing['params'])
             ts4_3 = monotonic_ns()
             time_cache_updates += (ts4_3 - ts4_2)
+
+            if _DEBUG_ALL:
+                printf(b"route_cache: process routings: result_merge...\n")
             # Will update `result_matrix` inplace:
             self.result_merge(
                 result_matrix=result_matrix,
@@ -687,6 +710,9 @@ cdef class RouteCache:
             time_result_merges += (ts4_4 - ts4_3)
 
         cdef uint64 ts5 = monotonic_ns()
+
+        if _DEBUG_ALL:
+            printf(b"route_cache: finalizing...\n")
 
         # Result check: should not have NaNs
         # (Note: routing failures are actually returned as `0.0`)
@@ -723,6 +749,8 @@ cdef class RouteCache:
         cdef uint64 ts6 = monotonic_ns()
         details['timings']['auxilary_1'] = ts6 - ts5
         details['timings']['total'] = ts6 - ts0
+        if _DEBUG_ALL:
+            printf(b"route_cache: done.\n")
         return result_matrix, details
 
     def route_matrix(self, *args, **kwargs):

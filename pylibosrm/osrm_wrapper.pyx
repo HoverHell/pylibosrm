@@ -1,14 +1,22 @@
 # distutils: language = c++
 # cython: language_level=3
 
+from libc.stdio cimport printf
+
 from libcpp cimport bool as c_bool
 from libcpp.string cimport string as c_string
+
 cimport cython
 from cython cimport view
 from cython.parallel cimport prange
 cimport numpy as cnumpy
-import numpy
+
 import os
+
+import numpy
+
+
+cdef c_bool _DEBUG_ALL = False
 
 
 ctypedef cnumpy.uint64_t uint64_t
@@ -159,7 +167,7 @@ cdef class OSRMWrapper:
             cnumpy.ndarray dst_lon_ar, cnumpy.ndarray dst_lat_ar,
             mode='duration_seconds', _debug=False):
 
-        if _debug:
+        if _debug or _DEBUG_ALL:
             print("route_matrix: prepare...")
 
         assert mode in ('duration_seconds', 'distance_meters')
@@ -205,11 +213,12 @@ cdef class OSRMWrapper:
 
         cdef c_string c_errors
 
-        if _debug:
-            print("route_matrix: src_lon:", src_lon_ar)
-            print("route_matrix: src_lat:", src_lat_ar)
-            print("route_matrix: dst_lon:", dst_lon_ar)
-            print("route_matrix: dst_lat:", dst_lat_ar)
+        if _debug or _DEBUG_ALL:
+            print("route_matrix: src_lon:", len(src_lon_ar), src_lon_ar)
+            print("route_matrix: src_lat:", len(src_lat_ar), src_lat_ar)
+            print("route_matrix: dst_lon:", len(dst_lon_ar), dst_lon_ar)
+            print("route_matrix: dst_lat:", len(dst_lat_ar), dst_lat_ar)
+            print("route_matrix:", dict(src_size=src_size, dst_size=dst_size))
             print("route_matrix: nogil...")
 
         with nogil:
@@ -219,16 +228,18 @@ cdef class OSRMWrapper:
                 dst_size=dst_size, dst_lon=&dst_lon_memview[0], dst_lat=&dst_lat_memview[0],
                 route_result=&result_memview[0, 0],
                 mode=mode_c,
-                _debug=_debug_c)
+                _debug=_debug_c or _DEBUG_ALL)
 
-        if _debug:
+        if _debug or _DEBUG_ALL:
             print("route_matrix: postprocess...")
 
         errors = (<bytes>(c_errors)).decode('utf-8', errors='replace')
         if errors:
+            if _debug or _DEBUG_ALL:
+                print("route_matrix: errors:", errors)
             raise RouteException(errors)
 
-        if _debug:
+        if _debug or _DEBUG_ALL:
             print("route_matrix: done.")
 
         return result

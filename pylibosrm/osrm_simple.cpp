@@ -176,9 +176,11 @@ std::string osrm_table(
   const auto status = osrm->Table(params, result);
 
   if (status == osrm::Status::Ok) {
+
     if (_debug) { std::cerr << "osrm_simple.osrm_table: Status Ok;\n"; }
 
     const auto &result_array = result.values.at(mode == 115 ? "durations" : "distances").get<osrm::json::Array>().values;
+    // // This one is a reminder that the result data could be less copious.
     // if (_debug) { std::cerr << "osrm_simple.osrm_table: result JSON:"; osrm::util::json::render(std::cerr, result); std::cerr << "\n"; }
     if (_debug) { std::cerr << "osrm_simple.osrm_table: result array size: " << result_array.size() << ";\n"; }
     if (result_array.size() != src_size) {
@@ -186,17 +188,31 @@ std::string osrm_table(
         std::to_string(src_size) +
         ", got " +
         std::to_string(result_array.size()) + ".\n"; }
+
     for (uint64_t src_idx = 0; src_idx < result_array.size(); src_idx++) {
+
       const auto result_matrix = result_array[src_idx].get<osrm::json::Array>().values;
+
       if (_debug) { if (src_idx == 0) { std::cerr << "osrm_simple.osrm_table: result array row size: " << result_matrix.size() << ";\n"; }; }
       if (result_matrix.size() != dst_size) {
         return "Internal error: Result row size mismatch: expected " +
           std::to_string(dst_size) +
           ", got " +
           std::to_string(result_matrix.size()) + ".\n"; }
+
+      // if (_debug) {auto tmp_obj = osrm::util::json::Object(); tmp_obj.values["result_matrix"] = result_array[src_idx].get<osrm::json::Array>(); std::cerr << "src_idx=" << src_idx << ", "; osrm::util::json::render(std::cerr, tmp_obj); std::cerr << ";\n"; }
+
       for (uint64_t dst_idx = 0; dst_idx < result_matrix.size(); dst_idx++) {
+        // std::cerr << "Filling src_idx=" << src_idx << ", dst_idx=" << dst_idx << "...\n";
         // rows are `from`s, each row is of `dst_size` elements.
-        route_result[src_idx * dst_size + dst_idx] = result_matrix[dst_idx].get<osrm::json::Number>().value;
+        try {
+          route_result[src_idx * dst_size + dst_idx] = result_matrix[dst_idx].get<osrm::json::Number>().value;
+        } catch (const std::runtime_error exc) {
+          // // Known case: `null` in the array.
+          // // Would be nice to get an informative error into some warnings list, but too problematic.
+          // std::cerr << "route_result fill exc: @" << src_idx << "," << dst_idx << ": " << exc.what() << ";\n";
+          route_result[src_idx * dst_size + dst_idx] = 0;
+        }
       }
     }
 
