@@ -528,6 +528,7 @@ cdef class RouteCache:
                     # Note: this complicated dynamic mutexing might sometimes not be necessary.
                     # It is not particularly useful to run multiple `cache_update`s in parallel.
                     # However, the src_... values can (currently) be duplicated.
+                    # TODO?: compare performance with `numpy.unique` instead of the `MUTEX_MAP`.
                     src_cache_mutex = MUTEX_MAP.get_mutex(src_cache)
                     if _DEBUG_ALL:
                         printf(
