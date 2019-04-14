@@ -21,15 +21,16 @@ cd pylibosrm
 
 ./_build_osrm.sh
 
-if which pip; then
-    PIP=pip
-else
-    PIP=pip3
-fi
+# if which pip; then
+#     PIP=pip
+# else
+#     PIP=pip3
+# fi
+PIP="python3 -m pip"
 
-"$PIP" install Cython numpy
+$PIP install Cython numpy
 
-./setup.py build
-./setup.py bdist_wheel
+python3 ./setup.py build
+python3 ./setup.py bdist_wheel
 # ./setup.py install
-"$PIP" install ./dist/*.whl
+$PIP install ./dist/*.whl
